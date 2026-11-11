@@ -38,6 +38,7 @@ const state = {
   follow: true,
   unitText: '',
   busy: false,
+  modal: false,       // открыто окно поиска/подтверждения: хоткеи отключены
 };
 
 let statusTimer = null;
@@ -204,7 +205,13 @@ function setTab(id) {
 
 // ---------- Действия ----------
 function confirm(text) {
-  return new Promise((resolve) => question.ask(text, (err, ok) => resolve(!err && ok)));
+  state.modal = true;
+  return new Promise((resolve) =>
+    question.ask(text, (err, ok) => {
+      state.modal = false;
+      resolve(!err && ok);
+    })
+  );
 }
 
 async function act(action) {
@@ -237,7 +244,10 @@ function toggleEnable() {
 }
 
 function openSearch() {
+  if (state.modal) return;
+  state.modal = true;
   prompt.input('Часть имени или описания (пусто — сбросить):', state.search, (err, value) => {
+    state.modal = false;
     list.focus();
     if (err || value === null || value === undefined) return;
     state.search = String(value).trim();
@@ -263,6 +273,14 @@ function quit() {
 }
 
 // ---------- Привязки ----------
+// Хоткеи не должны срабатывать, пока пользователь печатает в окне поиска/подтверждения.
+function hotkey(keys, fn) {
+  screen.key(keys, (...args) => {
+    if (state.modal) return;
+    fn(...args);
+  });
+}
+
 list.on('select item', (_item, idx) => {
   const s = state.view[idx];
   if (s) selectUnit(s.unit);
@@ -270,7 +288,7 @@ list.on('select item', (_item, idx) => {
 
 for (const t of TABS) {
   tabButtons[t.id].on('click', () => setTab(t.id));
-  screen.key(t.key, () => setTab(t.id));
+  hotkey(t.key, () => setTab(t.id));
 }
 
 const handlers = {
@@ -283,26 +301,27 @@ const handlers = {
   follow: toggleFollow,
   quit,
 };
-for (const [id, fn] of Object.entries(handlers)) buttons[id].on('click', fn);
+for (const [id, fn] of Object.entries(handlers)) buttons[id].on('click', () => { if (!state.modal) fn(); });
 
-screen.key(['s'], handlers.start);
-screen.key(['x'], handlers.stop);
-screen.key(['r'], handlers.restart);
-screen.key(['e'], handlers.enable);
-screen.key(['/'], handlers.search);
-screen.key(['f'], handlers.filter);
-screen.key(['w'], handlers.follow);
-screen.key(['l'], () => setTab('logs'));
-screen.key(['q', 'C-c'], quit);
-screen.key(['tab'], () => {
+hotkey(['s'], handlers.start);
+hotkey(['x'], handlers.stop);
+hotkey(['r'], handlers.restart);
+hotkey(['e'], handlers.enable);
+hotkey(['/'], handlers.search);
+hotkey(['f'], handlers.filter);
+hotkey(['w'], handlers.follow);
+hotkey(['l'], () => setTab('logs'));
+hotkey(['q'], quit);
+screen.key(['C-c'], quit);
+hotkey(['tab'], () => {
   const i = TABS.findIndex((t) => t.id === state.tab);
   setTab(TABS[(i + 1) % TABS.length].id);
 });
-screen.key(['pageup'], () => { state.follow = false; renderTabs(); content.scroll(-(content.height >> 1)); screen.render(); });
-screen.key(['pagedown'], () => { content.scroll(content.height >> 1); screen.render(); });
-screen.key(['g'], () => { state.follow = false; content.scrollTo(0); screen.render(); });
-screen.key(['S-g'], () => { content.setScrollPerc(100); screen.render(); });
-screen.key(['escape'], () => { if (state.search) { state.search = ''; applyView(); } });
+hotkey(['pageup'], () => { state.follow = false; renderTabs(); content.scroll(-(content.height >> 1)); screen.render(); });
+hotkey(['pagedown'], () => { content.scroll(content.height >> 1); screen.render(); });
+hotkey(['g'], () => { state.follow = false; content.scrollTo(0); screen.render(); });
+hotkey(['S-g'], () => { content.setScrollPerc(100); screen.render(); });
+hotkey(['escape'], () => { if (state.search) { state.search = ''; applyView(); } });
 screen.on('resize', () => { applyView(); drawContent(); });
 
 // Колёсико вверх в журнале отключает автопрокрутку
