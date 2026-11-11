@@ -21,7 +21,7 @@ const FILTERS = [
 ];
 
 const ui = buildUI();
-const { screen, header, list, content, status, buttons, tabButtons, question, prompt } = ui;
+const { screen, header, list, content, status, buttons, tabButtons, question, searchBox } = ui;
 
 const state = {
   all: [],            // все службы
@@ -243,17 +243,45 @@ function toggleEnable() {
   act(cur.enabled === 'enabled' ? 'disable' : 'enable');
 }
 
+// Поиск реализован без blessed-prompt: поле не зависит от фокуса, поэтому обновления и
+// посторонние события терминала не могут его закрыть. Закрывается только Enter / Esc.
+let searchOld = '';
+function drawSearch() {
+  searchBox.setContent(` Поиск: ${esc(state.search)}█   {bold}Enter{/bold} — оставить, {bold}Esc{/bold} — отмена, Ctrl+U — очистить`);
+  screen.render();
+}
+
 function openSearch() {
   if (state.modal) return;
   state.modal = true;
-  prompt.input('Часть имени или описания (пусто — сбросить):', state.search, (err, value) => {
-    state.modal = false;
-    list.focus();
-    if (err || value === null || value === undefined) return;
-    state.search = String(value).trim();
-    applyView();
-  });
+  searchOld = state.search;
+  screen.lockKeys = true; // экран и списки больше не обрабатывают клавиши (Ctrl+C остаётся)
+  searchBox.show();
+  drawSearch();
 }
+
+function closeSearch(keep) {
+  if (!state.modal) return;
+  if (!keep) state.search = searchOld;
+  state.modal = false;
+  screen.lockKeys = false;
+  searchBox.hide();
+  list.focus();
+  applyView();
+}
+
+screen.program.on('keypress', (ch, key) => {
+  if (!state.modal || !screen.lockKeys) return; // только когда открыт поиск
+  key = key || {};
+  if (key.name === 'enter' || key.name === 'return') return closeSearch(true);
+  if (key.name === 'escape') return closeSearch(false);
+  if (key.name === 'backspace') state.search = state.search.slice(0, -1);
+  else if (key.full === 'C-u') state.search = '';
+  else if (ch && !key.ctrl && !key.meta && ch.length === 1 && ch >= ' ' && ch !== '\x7f') state.search += ch;
+  else return;
+  applyView(); // фильтр применяется по мере набора
+  drawSearch();
+});
 
 function cycleFilter() {
   state.filterIdx = (state.filterIdx + 1) % FILTERS.length;

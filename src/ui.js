@@ -89,13 +89,13 @@ function buildUI() {
     style: { border: { fg: 'yellow' } },
   });
 
-  const prompt = blessed.prompt({
-    parent: screen, border: 'line', height: 'shrink', width: 'half',
-    top: 'center', left: 'center', label: ' Поиск ', tags: true, keys: true, mouse: true,
-    style: { border: { fg: 'cyan' } },
+  // Строка поиска: обычный бокс без собственного ввода и фокуса — ввод читаем сами (см. index.js).
+  const searchBox = blessed.box({
+    parent: screen, bottom: 1, left: 0, width: '100%', height: 1, tags: true, hidden: true,
+    style: { bg: 'cyan', fg: 'black' },
   });
 
-  return { screen, header, list, tabButtons, content, status, buttons, question, prompt };
+  return { screen, header, list, tabButtons, content, status, buttons, question, searchBox };
 }
 
 module.exports = { buildUI, TABS, BUTTONS };
